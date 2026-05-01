@@ -4,6 +4,18 @@
 # Configure OTBR depending on add-on settings
 # ==============================================================================
 
+# Read the thread interface name to target the correct instance
+thread_if="wpan0"
+if [ -f /tmp/otbr-thread-interface ]; then
+    thread_if=$(cat /tmp/otbr-thread-interface)
+fi
+export OT_CLI_CONNECT_SOCKET="/run/openthread-${thread_if}.sock"
+
+if bashio::config.true 'disable_border_routing'; then
+    bashio::log.info "Border routing is DISABLED on ${thread_if} - skipping TREL and NAT64 config"
+    exit 0
+fi
+
 ot-ctl trel enable
 
 if bashio::config.true 'nat64'; then

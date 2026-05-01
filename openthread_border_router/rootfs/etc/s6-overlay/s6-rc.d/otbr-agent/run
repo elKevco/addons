@@ -101,12 +101,28 @@ ipset create -exist otbr-ingress-deny-src-swap hash:net family inet6
 ipset create -exist otbr-ingress-allow-dst hash:net family inet6
 ipset create -exist otbr-ingress-allow-dst-swap hash:net family inet6
 
+# Clean up any existing chains from previous crashed instances
+# shellcheck disable=SC2086,SC2154
+ip6tables -D FORWARD -o ${thread_if} -j ${otbr_forward_ingress_chain} 2>/dev/null || true
+# shellcheck disable=SC2086
+ip6tables -F ${otbr_forward_ingress_chain} 2>/dev/null || true
+# shellcheck disable=SC2086
+ip6tables -X ${otbr_forward_ingress_chain} 2>/dev/null || true
+
 ip6tables -N "${otbr_forward_ingress_chain}"
 ip6tables -I FORWARD 1 -o "${thread_if}" -j "${otbr_forward_ingress_chain}"
 
-ip6tables -N "${otbr_forward_egress_chain}"
-ip6tables -I FORWARD 2 -i "${thread_if}" -j "${otbr_forward_egress_chain}"
+# shellcheck disable=SC2086,SC2154
+ip6tables -D FORWARD -i ${thread_if} -j ${otbr_forward_egress_chain} 2>/dev/null || true
+# shellcheck disable=SC2086
+ip6tables -F ${otbr_forward_egress_chain} 2>/dev/null || true
+# shellcheck disable=SC2086
+ip6tables -X ${otbr_forward_egress_chain} 2>/dev/null || true
 
+# shellcheck disable=SC2086,SC2154
+ip6tables -N ${otbr_forward_egress_chain}
+# shellcheck disable=SC2086
+ip6tables -I FORWARD 2 -i ${thread_if} -j ${otbr_forward_egress_chain}
 if bashio::config.true 'firewall'; then
     bashio::log.info "Setup OTBR firewall..."
 
@@ -143,13 +159,25 @@ fi
 otbr_rest_listen="::"
 otbr_rest_listen_port="$(bashio::addon.port 8081)"
 
+# Extract interface number from thread_if (e.g., wpan0 -> 0, wpan1 -> 1, wpan99 -> 99)
+thread_if_num="${thread_if#wpan}"
+
+# Assign unique REST API port based on interface number to avoid conflicts
+# wpan0 -> 8081, wpan1 -> 8082, wpan2 -> 8083, etc.
+default_rest_port=$((8081 + thread_if_num))
+
 # If user port is not set, listen on local interface only
 if ! bashio::var.has_value "${otbr_rest_listen_port}"; then
     otbr_rest_listen="$(bashio::addon.ip_address)"
-    otbr_rest_listen_port="8081"
+    otbr_rest_listen_port="${default_rest_port}"
+    bashio::log.info "REST API listening on ${otbr_rest_listen}:${otbr_rest_listen_port}"
 elif [ "${otbr_rest_listen_port}" != "8081" ]; then
-    bashio::log.warning "Custom OpenThread REST API port is not supported. Using 8081."
-    otbr_rest_listen_port="8081"
+    bashio::log.warning "Custom OpenThread REST API port ${otbr_rest_listen_port} configured."
+    bashio::log.warning "Using port ${otbr_rest_listen_port} for ${thread_if}"
+else
+    # User explicitly exposed port 8081, but use unique port internally
+    otbr_rest_listen_port="${default_rest_port}"
+    bashio::log.info "REST API listening on ${otbr_rest_listen}:${otbr_rest_listen_port}"
 fi
 
 # Store REST API listen information for check script
@@ -164,11 +192,27 @@ python3 /usr/local/bin/migrate_otbr_settings.py \
     --flow-control "${migrate_flow_control}" \
     --data-dir /data/thread/
 
-bashio::log.info "Starting otbr-agent..."
+# Build otbr-agent command arguments
+otbr_agent_args="-I ${thread_if}"
+
+# Add backbone interface only if border routing is not disabled
+if ! bashio::config.true 'disable_border_routing'; then
+    # shellcheck disable=SC2086
+    otbr_agent_args="${otbr_agent_args} -B ${backbone_if}"
+    trel_url="trel://${backbone_if}"
+    bashio::log.info "Border routing enabled on backbone interface: ${backbone_if}"
+else
+    # No backbone interface, no TREL
+    trel_url=""
+    bashio::log.warning "Border routing is DISABLED on ${thread_if} - this instance will not route to/from the backbone network"
+    bashio::log.warning "Use this mode when running alongside another OTBR instance (e.g., Home Assistant)"
+fi
+
 # shellcheck disable=SC2086
 exec s6-notifyoncheck -d -s 300 -w 300 -n 0 stdbuf -oL \
-    "/usr/sbin/otbr-agent" -I ${thread_if} -B "${backbone_if}" \
+    /usr/sbin/otbr-agent ${otbr_agent_args} \
         --rest-listen-address "${otbr_rest_listen}" \
+        --rest-listen-port "${otbr_rest_listen_port}" \
         -d${otbr_log_level_int} -v -s \
         "spinel+hdlc+uart://${device}?uart-baudrate=${baudrate}${flow_control}" \
-        "trel://${backbone_if}"
+        ${trel_url}

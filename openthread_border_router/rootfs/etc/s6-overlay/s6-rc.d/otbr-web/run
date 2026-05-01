@@ -6,7 +6,13 @@
 # ==============================================================================
 bashio::log.info "Starting otbr-web..."
 declare otbr_web_port
+declare thread_if
+
+thread_if="wpan0"
+if [ -f /tmp/otbr-thread-interface ]; then
+    thread_if=$(cat /tmp/otbr-thread-interface)
+fi
 
 otbr_web_port="$(bashio::addon.port 8080)"
 
-exec stdbuf -oL /usr/sbin/otbr-web -I wpan0 -d6 -s -a "::" -p "${otbr_web_port}"
+exec stdbuf -oL /usr/sbin/otbr-web -I ${thread_if} -d6 -s -a "::" -p "${otbr_web_port}"

@@ -32,12 +32,14 @@ options:
   firewall: true
   nat64: false
   beta: false
+  thread_interface: wpan0
+  disable_border_routing: false
 ports:
   8080/tcp: null
   8081/tcp: null
 ports_description:
   8080/tcp: OpenThread Web port
-  8081/tcp: OpenThread REST API port
+  8081/tcp: OpenThread REST API port (auto-assigned based on interface number)
 schema:
   device: device(subsystem=tty)
   baudrate: list(57600|115200|230400|460800|921600|1000000)
@@ -48,4 +50,6 @@ schema:
   firewall: bool
   nat64: bool
   beta: bool?
+  thread_interface: match(^wpan[0-9]+$)?
+  disable_border_routing: bool
 startup: services
