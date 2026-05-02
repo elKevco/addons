@@ -34,10 +34,16 @@ configuration:
     description: >-
       Enable IPv6 to IPv4 network address translation. This allows Thread
       devices to communicate with devices on the Internet.
-  beta:
-    name: Beta
+  thread_interface:
+    name: Thread Interface
     description: >-
-      Enable beta mode with Thread 1.4 and native OpenThread mDNS.
+      The wpan interface name for this OTBR instance.
+      Use different interfaces (wpan0, wpan1, wpan99, etc.) for multiple instances.
+  disable_border_routing:
+    name: Disable Border Routing
+    description: >-
+      Disable border routing (backbone network). Enable this when running
+      alongside another OTBR instance (e.g., Home Assistant's built-in Thread).
 network:
   8080/tcp: OpenThread Web port
-  8081/tcp: OpenThread REST API port
+  8081/tcp: OpenThread REST API port (auto-assigned based on interface number)
