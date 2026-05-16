@@ -1,5 +1,5 @@
 ---
-version: 2.17.7
+version: 2.17.8
 slug: marcelo_openthread_border_router
 name: OpenThread Border Router (Marcelo's Multi-Instance)
 description: OpenThread Border Router add-on with multi-instance support

@@ -76,8 +76,11 @@ done
 bashio::log.info "OTBR firewall/NAT64 rules teardown completed."
 
 if test "$e" -ne 0; then
-    echo "$e" > /run/s6-linux-init-container-results/exitcode
-    /run/s6/basedir/bin/halt
-    # Consider any otbr-agent exit as permanent failure according to s6
-    exit 125
+    if bashio::config.true 'disable_border_routing'; then
+        bashio::log.warning "otbr-agent exited with code $e - s6 will restart it"
+    else
+        echo "$e" > /run/s6-linux-init-container-results/exitcode
+        /run/s6/basedir/bin/halt
+        exit 125
+    fi
 fi
